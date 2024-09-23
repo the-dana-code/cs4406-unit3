@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta name="description" content="CS4406 Computer Graphics - Assignment #2" />
+    <meta charset="utf-8" />
+    <title>Assignment 2</title>
+
+    <style id="jsbin-css">
+    </style>
+</head>
+<body>
+<!-- Container for the 3D scene -->
+<div id="container"></div>
+</body>
+
+<!-- Include necessary JavaScript libraries -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.2.1/jquery.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/dat-gui/0.6.5/dat.gui.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/94/three.min.js"></script>
+
+<script>
+    // Set the size of the rendering window
+    var WIDTH = 500, HEIGHT = 500;
+
+    // Set camera attributes
+    var VIEW_ANGLE = 45, ASPECT = WIDTH / HEIGHT, NEAR = 1, FAR = 1000;
+
+    // Get the container element to attach the renderer
+    var $container = $('#container');
+
+    // Create a WebGL renderer
+    var renderer = new THREE.WebGLRenderer();
+
+    // Create a new Three.js scene
+    var scene = new THREE.Scene();
+
+    // Create a new perspective camera
+    var camera = new THREE.PerspectiveCamera(VIEW_ANGLE, ASPECT, NEAR, FAR);
+
+    // Position the camera so we can view the scene
+    camera.position.z = 30;
+
+    // Add the camera to the scene
+    scene.add(camera);
+
+    // Start the renderer and set its size
+    renderer.setSize(WIDTH, HEIGHT);
+
+    // Append the renderer's DOM element to the container
+    $container.append(renderer.domElement);
+
+    ///////////////////////////
+    // START OF STUDENT CODE //
+    ///////////////////////////
+
+    // Set the renderer's background color to white
+    renderer.setClearColor(0xFFFFFF, 1);
+
+    // Enable shadow mapping in the renderer
+    renderer.shadowMap.enabled = true;
+
+    // Define the size of the viewing area
+    var viewSize = 20; // The viewing area is 'viewSize' units high and wide
+
+    // Redefine the camera as an orthographic camera with the new viewing area
+    var camera = new THREE.OrthographicCamera(
+        -viewSize / 2, viewSize / 2, // left, right boundaries
+        viewSize / 2, -viewSize / 2, // top, bottom boundaries
+        NEAR, FAR                     // near and far clipping planes
+    );
+
+    /**
+     * An orthographic camera is chosen for this scene to simplify collision detection
+     * and maintain consistent object scaling throughout the animation. Unlike a perspective
+     * camera, which introduces depth and size changes based on object distance from the camera,
+     * the orthographic camera ensures that objects retain their proportions regardless of position.
+     * This is particularly beneficial for the bouncing sphere, as it allows for straightforward
+     * and accurate boundary collision calculations with the edges of the viewing area, without
+     * needing to account for perspective distortion. The lack of perspective also provides a clean,
+     * uniform look that aligns with the 2D-like motion being simulated.
+     */
+
+    // Position the camera along the z-axis to view the scene. Because we're using an
+    // orthographic projection, the actual choice of z distance has little effect.
+    camera.position.z = 30;
+
+    // Add the orthographic camera to the scene
+    scene.add(camera);
+
+    // Define an array of colors to cycle through when the sphere bounces
+    var colors = [0xFF0000, 0x00FF00, 0x0000FF]; // Red, Green, Blue
+    var colorIndex = 0; // Start with red
+
+    // Define the radius of the sphere
+    var sphereRadius = 1;
+
+    // Create a sphere geometry with the specified radius and detail
+    var sphereGeometry = new THREE.SphereGeometry(sphereRadius, 32, 32);
+
+    // Create a Phong material for the sphere with an initial red color
+    var sphereMaterial = new THREE.MeshPhongMaterial({ color: colors[colorIndex] });
+
+    // Create the sphere mesh by combining geometry and material
+    var sphereMesh = new THREE.Mesh(sphereGeometry, sphereMaterial);
+
+    // Enable the sphere to cast shadows
+    sphereMesh.castShadow = true;
+
+    // Position the sphere near the top of the viewing area
+    sphereMesh.position.set(0, viewSize / 4, 0); // x=0, y=25% above center, z=0
+
+    // Add the sphere mesh to the scene
+    scene.add(sphereMesh);
+
+    // Create a plane to serve as the background and receive shadows
+    var planeGeometry = new THREE.PlaneGeometry(viewSize, viewSize);
+    var planeMaterial = new THREE.MeshPhongMaterial({ color: 0xFFFFFF });
+    var planeMesh = new THREE.Mesh(planeGeometry, planeMaterial);
+
+    // Enable the plane to receive shadows
+    planeMesh.receiveShadow = true;
+
+    // Position the plane behind the sphere along the z-axis
+    planeMesh.position.z = -sphereRadius - 0.1;
+
+    // Add the plane mesh to the scene
+    scene.add(planeMesh);
+
+    // Create a light-yellow point light positioned at the upper-left corner
+    var lightColor = 0xFFFFAA;
+    var pointLight = new THREE.PointLight(lightColor, 1, 0); // '0' means no attenuation (infinite distance)
+
+    // Enable the point light to cast shadows
+    pointLight.castShadow = true;
+
+    // Adjust shadow properties for better quality
+    pointLight.shadow.mapSize.width = 1024;
+    pointLight.shadow.mapSize.height = 1024;
+
+    // Position the point light at the upper-left corner, slightly in front of the scene
+    pointLight.position.set(-viewSize / 2, viewSize / 2, 10);
+
+    // Add the point light to the scene
+    scene.add(pointLight);
+
+    // Add ambient light to soften the shadows and illuminate the scene
+    var ambientLight = new THREE.AmbientLight(0x404040); // Soft white ambient light
+    scene.add(ambientLight);
+
+    // Define constants for animation parameters
+    var initialVelocityX = 0.1; // Initial horizontal velocity
+    var initialVelocityY = 0.1; // Initial vertical velocity
+    var gravity = 0.01;         // Gravity acceleration (pulling the sphere downward)
+
+    // Initialize the sphere's velocity
+    var velocityX = initialVelocityX;
+    var velocityY = initialVelocityY;
+
+    /**
+     * Updates the sphere's position, handles bouncing, and applies gravity.
+     */
+    function updatePosition() {
+        // Update the sphere's position based on its velocity
+        sphereMesh.position.x += velocityX;
+        sphereMesh.position.y += velocityY;
+
+        // Apply gravity to the vertical velocity
+        velocityY -= gravity;
+
+        // Check for collision with the right boundary
+        if (sphereMesh.position.x >= (viewSize / 2 - sphereRadius) && velocityX > 0) {
+            velocityX = -velocityX; // Reverse horizontal direction
+            changeColor();          // Change color upon collision
+        }
+
+        // Check for collision with the left boundary
+        if (sphereMesh.position.x <= (-viewSize / 2 + sphereRadius) && velocityX < 0) {
+            velocityX = -velocityX; // Reverse horizontal direction
+            changeColor();          // Change color upon collision
+        }
+
+        // Check for collision with the bottom boundary
+        if (sphereMesh.position.y <= (-viewSize / 2 + sphereRadius) && velocityY < 0) {
+            velocityY = 0.55;       // Reverse and reduce vertical velocity to simulate energy loss
+            changeColor();          // Change color upon collision
+        }
+    }
+
+    /**
+     * Rotates the sphere's color through the predefined colors array.
+     */
+    function changeColor() {
+        // Increment the color index and loop back if necessary
+        colorIndex = (colorIndex + 1) % colors.length;
+        // Update the sphere's material color
+        sphereMesh.material.color.setHex(colors[colorIndex]);
+    }
+
+    // Placeholder for camera controls to prevent errors in the render function
+    var cameraControls = {
+        update: function () {} // Empty update function
+    };
+
+    /**
+     * The animation loop function that updates the scene and renders it.
+     */
+    function animate() {
+        // Request the next frame of the animation
+        requestAnimationFrame(animate);
+
+        // Update the sphere's position and handle collisions
+        updatePosition();
+
+        // Render the scene from the camera's perspective
+        render();
+    }
+
+    // Start the animation loop
+    animate();
+
+    /////////////////////////
+    // END OF STUDENT CODE //
+    /////////////////////////
+
+    // Render function to update the scene
+    function render() {
+        cameraControls.update();
+        renderer.render(scene, camera);
+    }
+</script>
+</html>
